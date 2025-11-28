@@ -1,0 +1,68 @@
+{
+  "name": "smee-it",
+  "type": "module",
+  "version": "0.0.0-alpha.0",
+  "packageManager": "pnpm@10.23.0",
+  "description": "A minimal, modern smee.io client for receiving GitHub webhooks locally",
+  "keywords": [
+    "smee",
+    "webhook",
+    "github",
+    "sse",
+    "eventsource",
+    "local-development",
+    "testing"
+  ],
+  "author": "Viki <hi@viki.moe> (https://github.com/vikiboss)",
+  "license": "MIT",
+  "homepage": "https://github.com/vikiboss/smee-it#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vikiboss/smee-it.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vikiboss/smee-it/issues"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "release": "bumpp",
+    "prepublishOnly": "pnpm build"
+  },
+  "dependencies": {
+    "eventsource": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@vitest/coverage-v8": "4.0.14",
+    "bumpp": "^10.3.2",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.14"
+  }
+}
