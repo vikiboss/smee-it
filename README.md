@@ -5,225 +5,286 @@
 [![license](https://img.shields.io/npm/l/smee-it.svg)](https://github.com/vikiboss/smee-it/blob/main/LICENSE)
 [![test coverage](https://img.shields.io/badge/coverage-100%25-brightgreen.svg)](https://github.com/vikiboss/smee-it)
 
-简洁、现代的 [smee.io](https://smee.io) 客户端，基于 Server-Sent Events (SSE) 在本地接收 Webhook 事件。
+A modern [smee.io](https://smee.io) client for receiving webhooks locally via Server-Sent Events.
 
-## 为什么选择 smee-it？
+[English](#english) | [中文](#中文)
 
-在开发 GitHub App、Bot 或任何基于 Webhook 的集成时，你需要接收来自外部服务的 HTTP 回调。然而：
+---
 
-- **没有公网端点**：本地开发环境无法从互联网访问
-- **隧道工具复杂**：ngrok 等方案需要额外配置，且常有速率限制
-- **官方客户端局限**：[smee-client](https://github.com/probot/smee-client) 强制使用 `target` URL 模式（为 HTTP 转发设计），存在 TypeScript 类型问题，且使用过时的模式
+## English
 
-**smee-it** 提供了更好的解决方案：
+### Introduction
 
-- ✅ **事件驱动 API** — 直接订阅 Webhook 事件，无需 HTTP 服务器
-- ✅ **类型安全** — TypeScript 编写，严格类型，完整的 IntelliSense 支持
-- ✅ **现代 ESM** — 原生 ES 模块，支持 Tree-shaking
-- ✅ **100% 测试覆盖** — 使用 Vitest 全面测试
-- ✅ **支持私有部署** — 兼容自托管的 smee 服务器
-- ✅ **零配置** — 开箱即用，极简设置
+When developing GitHub Apps or webhook-based integrations, you need a publicly accessible URL to receive HTTP callbacks. [smee.io](https://smee.io) provides this by forwarding webhooks to your local machine via SSE.
 
-## ⚠️ 安全提示
+This library is a lightweight, event-driven client for receiving those forwarded events.
 
-**smee.io 是公开服务**，任何知道你频道 URL 的人都可以：
-- 查看所有经过频道的 Webhook 数据
-- 向频道发送伪造数据
+### Comparison with smee-client
 
-**推荐用于**：
-- 🧪 本地开发调试
-- 🧪 CI/CD 集成测试
-- 🧪 开源项目的 Webhook 测试
+The official [smee-client](https://github.com/probot/smee-client) uses a "target URL" pattern that requires running a local HTTP server. This library takes a different approach:
 
-**不推荐用于**：
-- ❌ 生产环境
-- ❌ 敏感或私密数据传输
-- ❌ 关键业务流程
+- **Event-driven API** — Subscribe to events directly without an intermediate HTTP server
+- **Full TypeScript support** — Strict types with complete IDE integration
+- **ESM-first** — Native ES modules with tree-shaking support
+- **Self-hosted compatible** — Works with private smee server deployments
 
-> 对于敏感项目，建议 [自托管 smee 服务器](https://github.com/probot/smee.io) 或使用 Webhook 签名验证。
-
-## 安装
+### Installation
 
 ```bash
 npm install smee-it
-# 或
-pnpm add smee-it
-# 或
-yarn add smee-it
 ```
 
-## 快速开始
+### Quick Start
 
 ```ts
 import { SmeeClient } from 'smee-it'
 
-const client = new SmeeClient('https://smee.io/your-channel-id')
+const client = new SmeeClient('https://smee.io/your-channel')
 
 client.on('message', (event) => {
-  console.log('收到消息:', event.body)
-  console.log('请求头:', event.headers)
-  console.log('查询参数:', event.query)
-  console.log('时间戳:', event.timestamp)
+  console.log(event.body)     // webhook payload
+  console.log(event.headers)  // original HTTP headers
 })
 
-client.on('open', () => console.log('已连接'))
-client.on('error', (err) => console.error('错误:', err))
-client.on('close', () => console.log('已断开'))
+client.on('error', (err) => console.error(err))
 
 client.start()
-
-// 需要时停止
-// client.stop()
 ```
 
-## 创建新频道
+Create a new channel programmatically:
 
 ```ts
-import { SmeeClient } from 'smee-it'
-
-// 在 smee.io 上创建新频道
-const channelUrl = await SmeeClient.createChannel()
-console.log('频道地址:', channelUrl)
-
-const client = new SmeeClient(channelUrl)
-client.on('message', (e) => console.log(e.body))
-client.start()
+const url = await SmeeClient.createChannel()
+const client = new SmeeClient(url)
 ```
 
-## 私有部署 Smee 服务器
-
-对于敏感项目，你可以 [部署自己的 smee 服务器](https://github.com/probot/smee.io)：
+With a self-hosted smee server:
 
 ```ts
-import { SmeeClient } from 'smee-it'
-
-// 在私有 smee 服务器上创建频道
-const channelUrl = await SmeeClient.createChannel('https://smee.your-company.com')
-
-const client = new SmeeClient(channelUrl)
-client.on('message', (e) => console.log(e.body))
-client.start()
+const url = await SmeeClient.createChannel('https://smee.example.com')
 ```
 
-## API 参考
+### API Reference
 
-### `new SmeeClient(source: string)`
+#### Constructor
 
-创建新的 Smee 客户端实例。
+**`new SmeeClient(url: string)`**
 
-- `source` — smee 频道 URL（如 `https://smee.io/abc123`）
+Creates a new client instance with the specified channel URL.
 
-### `SmeeClient.createChannel(baseUrl?: string): Promise<string>`
+#### Static Methods
 
-静态方法，创建新的 smee 频道。
+**`SmeeClient.createChannel(baseUrl?: string): Promise<string>`**
 
-- `baseUrl` — 可选，smee 服务器 URL，默认为 `https://smee.io`
-- 返回新频道的 URL
+Creates a new channel and returns its URL. Defaults to `https://smee.io`.
 
-### `client.start(): void`
+#### Instance Methods
 
-启动客户端，开始接收事件。
+| Method | Description |
+|--------|-------------|
+| `start()` | Connect and begin receiving events |
+| `stop()` | Disconnect and stop receiving events |
 
-### `client.stop(): void`
+#### Properties
 
-停止客户端，关闭连接。
+| Property | Type | Description |
+|----------|------|-------------|
+| `connected` | `boolean` | Current connection status |
 
-### `client.connected: boolean`
+#### Events
 
-返回当前是否已连接。
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `message` | `SmeeMessage` | Webhook event received |
+| `open` | — | Connection established |
+| `close` | — | Connection closed |
+| `error` | `Error` | Error occurred |
+| `ping` | — | Heartbeat received |
 
-### `client.on(event, handler): this`
-
-注册事件监听器，支持链式调用。
-
-| 事件 | 载荷 | 描述 |
-|------|------|------|
-| `message` | `SmeeMessage` | 收到 Webhook 消息 |
-| `open` | `undefined` | 连接已建立 |
-| `error` | `Error` | 发生错误 |
-| `close` | `undefined` | 连接已关闭 |
-| `ping` | `undefined` | 收到心跳 |
-
-### `client.off(event, handler): this`
-
-移除事件监听器。
-
-### `SmeeMessage`
+#### SmeeMessage
 
 ```ts
 interface SmeeMessage {
-  body: Record<string, unknown>    // Webhook 请求体
-  query: Record<string, string>    // URL 查询参数
-  headers: Record<string, string>  // HTTP 请求头
-  timestamp: number                // 事件时间戳（毫秒）
-  rawBody: string                  // 原始请求体字符串（用于签名验证）
+  body: Record<string, unknown>   // Parsed JSON body
+  headers: Record<string, string> // HTTP headers
+  query: Record<string, string>   // URL query parameters
+  timestamp: number               // Unix timestamp (ms)
+  rawBody: string                 // Raw body for signature verification
 }
 ```
 
-## 使用场景
+### Webhook Signature Verification
 
-### GitHub Webhook 本地开发
-
-1. 访问 [smee.io](https://smee.io) 获取频道 URL
-2. 在 GitHub 仓库设置中配置 Webhook 指向该 URL
-3. 使用本库在本地接收事件
-
-### 使用 @octokit/webhooks 进行签名验证
-
-虽然 smee.io 是公开的，但你仍可以通过签名验证 Webhook 的真实性：
+Since smee.io is a public service, always verify webhook signatures:
 
 ```ts
-import { SmeeClient } from 'smee-it'
 import { Webhooks } from '@octokit/webhooks'
 
-const webhooks = new Webhooks({
-  secret: process.env.WEBHOOK_SECRET!,
-})
-
-const client = new SmeeClient('https://smee.io/your-channel-id')
+const webhooks = new Webhooks({ secret: process.env.WEBHOOK_SECRET })
 
 client.on('message', async (event) => {
   const signature = event.headers['x-hub-signature-256']
-
-  // 验证签名
   if (!(await webhooks.verify(event.rawBody, signature))) {
-    console.error('签名验证失败，忽略此消息')
     return
   }
-
-  // 签名验证通过，处理事件
-  const eventType = event.headers['x-github-event']
-  console.log(`收到 ${eventType} 事件:`, event.body)
+  // Process verified event
 })
+```
+
+### Security Considerations
+
+smee.io channels are publicly accessible. Anyone with the channel URL can view the webhook data.
+
+**Recommended for:**
+- Local development and debugging
+- CI/CD integration testing
+- Open source project webhook testing
+
+**Not recommended for:**
+- Production environments
+- Sensitive or confidential data
+
+For sensitive use cases, consider [self-hosting smee](https://github.com/probot/smee.io).
+
+---
+
+## 中文
+
+### 简介
+
+开发 GitHub App 或基于 Webhook 的集成时，需要一个公网可访问的 URL 来接收 HTTP 回调。[smee.io](https://smee.io) 通过 SSE 将 Webhook 转发到本地来解决这个问题。
+
+本库是一个轻量的事件驱动客户端，用于接收这些转发的事件。
+
+### 与 smee-client 的对比
+
+官方 [smee-client](https://github.com/probot/smee-client) 采用 "target URL" 模式，需要运行一个本地 HTTP 服务器。本库采用不同的方式：
+
+- **事件驱动 API** — 直接订阅事件，无需中间 HTTP 服务器
+- **完整 TypeScript 支持** — 严格类型定义，完善的 IDE 集成
+- **ESM 优先** — 原生 ES 模块，支持 tree-shaking
+- **支持私有部署** — 兼容自托管的 smee 服务器
+
+### 安装
+
+```bash
+npm install smee-it
+```
+
+### 快速开始
+
+```ts
+import { SmeeClient } from 'smee-it'
+
+const client = new SmeeClient('https://smee.io/your-channel')
+
+client.on('message', (event) => {
+  console.log(event.body)     // webhook 载荷
+  console.log(event.headers)  // 原始 HTTP 头
+})
+
+client.on('error', (err) => console.error(err))
 
 client.start()
 ```
 
-> **注意**：签名验证可以防止伪造消息，但无法防止窃听。敏感数据请使用自托管的 smee 服务器。
-
-### CI/CD 集成测试
+通过代码创建新频道：
 
 ```ts
-import { SmeeClient, type SmeeMessage } from 'smee-it'
-import { expect, test } from 'vitest'
+const url = await SmeeClient.createChannel()
+const client = new SmeeClient(url)
+```
 
-test('should receive webhook events', async () => {
-  const client = new SmeeClient(process.env.SMEE_URL!)
-  const events: SmeeMessage[] = []
+使用自托管 smee 服务器：
 
-  client.on('message', (e) => events.push(e))
-  client.start()
+```ts
+const url = await SmeeClient.createChannel('https://smee.example.com')
+```
 
-  // 触发发送 Webhook 的操作...
+### API 参考
 
-  // 验证收到的事件
-  expect(events).toHaveLength(1)
-  expect(events[0].body).toMatchObject({ action: 'opened' })
+#### 构造函数
 
-  client.stop()
+**`new SmeeClient(url: string)`**
+
+使用指定的频道 URL 创建客户端实例。
+
+#### 静态方法
+
+**`SmeeClient.createChannel(baseUrl?: string): Promise<string>`**
+
+创建新频道并返回其 URL。默认使用 `https://smee.io`。
+
+#### 实例方法
+
+| 方法 | 说明 |
+|------|------|
+| `start()` | 建立连接，开始接收事件 |
+| `stop()` | 断开连接，停止接收事件 |
+
+#### 属性
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `connected` | `boolean` | 当前连接状态 |
+
+#### 事件
+
+| 事件 | 载荷 | 说明 |
+|------|------|------|
+| `message` | `SmeeMessage` | 收到 Webhook 事件 |
+| `open` | — | 连接已建立 |
+| `close` | — | 连接已关闭 |
+| `error` | `Error` | 发生错误 |
+| `ping` | — | 收到心跳 |
+
+#### SmeeMessage
+
+```ts
+interface SmeeMessage {
+  body: Record<string, unknown>   // 解析后的 JSON body
+  headers: Record<string, string> // HTTP 请求头
+  query: Record<string, string>   // URL 查询参数
+  timestamp: number               // Unix 时间戳 (ms)
+  rawBody: string                 // 原始 body（用于签名验证）
+}
+```
+
+### Webhook 签名验证
+
+由于 smee.io 是公开服务，建议始终验证 Webhook 签名：
+
+```ts
+import { Webhooks } from '@octokit/webhooks'
+
+const webhooks = new Webhooks({ secret: process.env.WEBHOOK_SECRET })
+
+client.on('message', async (event) => {
+  const signature = event.headers['x-hub-signature-256']
+  if (!(await webhooks.verify(event.rawBody, signature))) {
+    return
+  }
+  // 处理已验证的事件
 })
 ```
 
-## 许可证
+### 安全注意事项
+
+smee.io 的频道是公开可访问的，任何知道频道 URL 的人都可以查看 Webhook 数据。
+
+**推荐用于：**
+- 本地开发调试
+- CI/CD 集成测试
+- 开源项目的 Webhook 测试
+
+**不推荐用于：**
+- 生产环境
+- 敏感或机密数据
+
+对于敏感场景，建议[自托管 smee 服务器](https://github.com/probot/smee.io)。
+
+---
+
+## License
 
 MIT © [Viki](https://github.com/vikiboss)
