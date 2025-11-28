@@ -22,23 +22,38 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version-file: '.node-version'
           cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Type check
-        run: pnpm typecheck
-
-      - name: Test
-        run: pnpm test
+      - name: Run type check & test
+        run: pnpm typecheck && pnpm test
 
       - name: Build
         run: pnpm build
 
-      - name: Publish to NPM
-        run: pnpm publish --access public --no-git-checks
+      - name: Determine npm tag
+        id: npm-tag
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ "$VERSION" =~ -([a-z]+) ]]; then
+            TAG="${BASH_REMATCH[1]}"
+            echo "tag=$TAG" >> $GITHUB_OUTPUT
+            echo "Publishing version $VERSION with tag: $TAG"
+          else
+            echo "tag=latest" >> $GITHUB_OUTPUT
+            echo "Publishing version $VERSION with tag: latest"
+          fi
+
+      - name: Publish package
+        run: pnpm publish --provenance --no-git-checks --access public --tag ${{ steps.npm-tag.outputs.tag }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Generate changelog
+        run: npx changelogithub@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
