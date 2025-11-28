@@ -1,35 +1,17 @@
 /**
- * SmeeClient - 简洁的 Smee.io SSE 客户端
- *
- * 用于接收 GitHub Webhook 等通过 smee.io 中转的事件。
- * 基于 Server-Sent Events (SSE) 实现，无需部署公网服务即可本地接收 Webhook。
- *
- * @remarks
- * smee.io 是公开服务，请勿用于传输敏感信息，仅建议用于开发测试。
+ * A lightweight smee.io client for receiving webhooks locally via SSE.
  *
  * @example
- * 基础用法
  * ```ts
  * import { SmeeClient } from 'smee-it'
  *
  * const client = new SmeeClient('https://smee.io/your-channel')
  *
  * client.on('message', (event) => {
- *   console.log('收到事件:', event.body)
- *   console.log('请求头:', event.headers)
+ *   console.log(event.body)
+ *   console.log(event.headers['x-github-event'])
  * })
  *
- * client.on('error', (err) => console.error('错误:', err))
- *
- * client.start()
- * ```
- *
- * @example
- * 动态创建频道
- * ```ts
- * const channelUrl = await SmeeClient.createChannel()
- * const client = new SmeeClient(channelUrl)
- * client.on('message', (e) => console.log(e.body))
  * client.start()
  * ```
  *
@@ -39,79 +21,34 @@
 import { EventSource } from 'eventsource'
 
 /**
- * Smee 消息事件
- *
- * 包含通过 smee.io 中转的 Webhook 请求的完整信息。
+ * Webhook message received via smee.io.
  */
-export interface SmeeMessage {
-  /**
-   * Webhook 请求体
-   *
-   * 包含原始 Webhook 的 JSON body 数据。
-   * 对于 GitHub Webhook，通常包含 action、repository、sender 等字段。
-   */
-  body: Record<string, unknown>
-
-  /**
-   * URL 查询参数
-   *
-   * 原始 Webhook 请求 URL 中的查询参数。
-   */
+export interface SmeeMessage<T = any> {
+  /** Parsed JSON body of the webhook request. */
+  body: T
+  /** URL query parameters. */
   query: Record<string, string>
-
-  /**
-   * 事件时间戳
-   *
-   * smee.io 接收到该事件的 Unix 时间戳（毫秒）。
-   */
+  /** Unix timestamp (ms) when smee.io received the event. */
   timestamp: number
-
-  /**
-   * HTTP 请求头
-   *
-   * 原始 Webhook 请求的 HTTP 头信息。
-   * 对于 GitHub Webhook，包含 x-github-event、x-github-delivery 等。
-   */
+  /** HTTP headers (e.g., `x-github-event`, `x-github-delivery`). */
   headers: Record<string, string>
-
-  /**
-   * 原始请求体字符串
-   *
-   * 用于 Webhook 签名验证。@octokit/webhooks 等库需要原始字符串进行 HMAC 验证。
-   *
-   * @example
-   * ```ts
-   * import { Webhooks } from '@octokit/webhooks'
-   *
-   * const webhooks = new Webhooks({ secret: process.env.WEBHOOK_SECRET! })
-   * const isValid = await webhooks.verify(event.rawBody, event.headers['x-hub-signature-256'])
-   * ```
-   */
+  /** Raw body string for signature verification. */
   rawBody: string
 }
 
 /**
- * SmeeClient 支持的事件类型映射
- *
- * @example
- * ```ts
- * client.on('message', (msg: SmeeMessage) => { ... })
- * client.on('open', () => { ... })
- * client.on('error', (err: Error) => { ... })
- * client.on('close', () => { ... })
- * client.on('ping', () => { ... })
- * ```
+ * Event types supported by SmeeClient.
  */
-export type SmeeEvents = {
-  /** 收到 Webhook 消息事件 */
-  message: SmeeMessage
-  /** 收到 smee.io 服务端心跳 */
+export type SmeeEvents<T = any> = {
+  /** Webhook message received. */
+  message: SmeeMessage<T>
+  /** Heartbeat from smee.io. */
   ping: undefined
-  /** SSE 连接已建立 */
+  /** SSE connection opened. */
   open: undefined
-  /** 发生错误（如网络中断、解析失败等） */
+  /** Error occurred. */
   error: Error
-  /** 连接已关闭 */
+  /** Connection closed. */
   close: undefined
 }
 
@@ -123,87 +60,36 @@ export type SmeeEvents = {
 type Handler<T> = (data: T) => void
 
 /**
- * Smee.io SSE 客户端
- *
- * 通过 Server-Sent Events 连接到 smee.io 频道，
- * 实时接收并解析转发的 Webhook 事件。
+ * Smee.io SSE client for receiving webhooks locally.
  *
  * @example
  * ```ts
  * const client = new SmeeClient('https://smee.io/abc123')
- *
- * client
- *   .on('open', () => console.log('已连接'))
- *   .on('message', (e) => console.log('消息:', e.body))
- *   .on('error', (e) => console.error('错误:', e))
- *   .start()
- *
- * // 稍后停止
- * client.stop()
+ * client.on('message', (e) => console.log(e.body))
+ * client.start()
  * ```
  */
-export class SmeeClient {
-  /** smee.io 频道 URL */
+export class SmeeClient<T = any> {
   #source: string
-  /** EventSource 实例 */
   #es: EventSource | null = null
-  /** 事件处理器映射 */
   #handlers = new Map<string, Set<Handler<unknown>>>()
 
   /**
-   * 创建 SmeeClient 实例
-   *
-   * @param source - smee.io 频道 URL，如 `https://smee.io/your-channel-id`
-   *
-   * @example
-   * ```ts
-   * const client = new SmeeClient('https://smee.io/abc123')
-   * ```
+   * @param source - Smee channel URL (e.g., `https://smee.io/abc123`)
    */
   constructor(source: string) {
     this.#source = source.replace(/\/$/, '')
   }
 
-  /**
-   * 当前是否已连接到 smee.io
-   *
-   * @returns 如果 SSE 连接处于打开状态则返回 `true`
-   *
-   * @example
-   * ```ts
-   * if (client.connected) {
-   *   console.log('客户端已连接')
-   * }
-   * ```
-   */
+  /** Whether the client is currently connected. */
   get connected(): boolean {
     return this.#es?.readyState === EventSource.OPEN
   }
 
   /**
-   * 创建新的 smee 频道
-   *
-   * 向 smee 服务器发送请求以获取一个新的唯一频道 URL。
-   * 该频道可用于接收 Webhook 事件。
-   *
-   * @param baseUrl - 可选，smee 服务器基础 URL，默认为 `https://smee.io`。
-   *                  支持私有部署的 smee 服务器。
-   * @returns 新创建的频道 URL
-   * @throws 如果创建频道失败则抛出错误
-   *
-   * @example
-   * 使用 smee.io 官方服务
-   * ```ts
-   * const channelUrl = await SmeeClient.createChannel()
-   * // 输出: https://smee.io/aBcDeFgHiJkLmNoP
-   * ```
-   *
-   * @example
-   * 使用私有部署的 smee 服务器
-   * ```ts
-   * const channelUrl = await SmeeClient.createChannel('https://smee.example.com')
-   * // 输出: https://smee.example.com/aBcDeFgHiJkLmNoP
-   * ```
+   * Create a new smee channel.
+   * @param baseUrl - Smee server URL (defaults to `https://smee.io`)
+   * @returns The new channel URL
    */
   static async createChannel(baseUrl = 'https://smee.io'): Promise<string> {
     const url = baseUrl.replace(/\/$/, '')
@@ -213,47 +99,15 @@ export class SmeeClient {
     return location
   }
 
-  /**
-   * 注册事件监听器
-   *
-   * 支持链式调用。
-   *
-   * @typeParam K - 事件名称类型
-   * @param event - 事件名称
-   * @param handler - 事件处理函数
-   * @returns 当前实例，支持链式调用
-   *
-   * @example
-   * ```ts
-   * client
-   *   .on('open', () => console.log('已连接'))
-   *   .on('message', (e) => console.log(e.body))
-   *   .on('error', (e) => console.error(e))
-   * ```
-   */
-  on<K extends keyof SmeeEvents>(event: K, handler: Handler<SmeeEvents[K]>): this {
+  /** Register an event listener. Supports chaining. */
+  on<K extends keyof SmeeEvents<T>>(event: K, handler: Handler<SmeeEvents<T>[K]>): this {
     if (!this.#handlers.has(event)) this.#handlers.set(event, new Set())
     this.#handlers.get(event)!.add(handler as Handler<unknown>)
     return this
   }
 
-  /**
-   * 移除事件监听器
-   *
-   * @typeParam K - 事件名称类型
-   * @param event - 事件名称
-   * @param handler - 要移除的事件处理函数（必须是同一个函数引用）
-   * @returns 当前实例，支持链式调用
-   *
-   * @example
-   * ```ts
-   * const handler = (e: SmeeMessage) => console.log(e)
-   * client.on('message', handler)
-   * // 稍后移除
-   * client.off('message', handler)
-   * ```
-   */
-  off<K extends keyof SmeeEvents>(event: K, handler: Handler<SmeeEvents[K]>): this {
+  /** Remove an event listener. */
+  off<K extends keyof SmeeEvents<T>>(event: K, handler: Handler<SmeeEvents<T>[K]>): this {
     this.#handlers.get(event)?.delete(handler as Handler<unknown>)
     return this
   }
@@ -262,28 +116,11 @@ export class SmeeClient {
    * 触发事件
    * @internal
    */
-  #emit<K extends keyof SmeeEvents>(event: K, data: SmeeEvents[K]): void {
+  #emit<K extends keyof SmeeEvents<T>>(event: K, data: SmeeEvents<T>[K]): void {
     this.#handlers.get(event)?.forEach(h => h(data))
   }
 
-  /**
-   * 启动客户端，开始接收事件
-   *
-   * 建立与 smee.io 的 SSE 连接。如果已经连接，调用此方法不会有任何效果。
-   * 连接建立后会触发 `open` 事件，收到消息时触发 `message` 事件。
-   *
-   * @example
-   * ```ts
-   * client.on('open', () => console.log('连接成功'))
-   * client.on('message', (e) => {
-   *   // 处理 GitHub Webhook 事件
-   *   if (e.headers['x-github-event'] === 'push') {
-   *     console.log('收到 push 事件:', e.body)
-   *   }
-   * })
-   * client.start()
-   * ```
-   */
+  /** Start receiving events. No-op if already connected. */
   start(): void {
     if (this.#es) return
 
@@ -304,7 +141,7 @@ export class SmeeClient {
       const rawBody = body !== undefined ? JSON.stringify(body) : ''
 
       this.#emit('message', {
-        body: (body ?? {}) as Record<string, unknown>,
+        body: (body ?? {}) as T,
         query: (query ?? {}) as Record<string, string>,
         timestamp: (timestamp ?? Date.now()) as number,
         headers,
@@ -322,19 +159,7 @@ export class SmeeClient {
     }
   }
 
-  /**
-   * 停止客户端，断开连接
-   *
-   * 关闭 SSE 连接并触发 `close` 事件。
-   * 停止后可以再次调用 `start()` 重新连接。
-   *
-   * @example
-   * ```ts
-   * // 优雅关闭
-   * client.on('close', () => console.log('已断开连接'))
-   * client.stop()
-   * ```
-   */
+  /** Stop receiving events and close the connection. */
   stop(): void {
     this.#es?.close()
     this.#es = null
@@ -343,4 +168,3 @@ export class SmeeClient {
 }
 
 export default SmeeClient
-
