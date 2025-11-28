@@ -131,6 +131,105 @@ client.on('message', async (event) => {
 })
 ```
 
+### Examples
+
+#### GitHub Star Notifications
+
+A complete example: receive notifications when someone stars your repository.
+
+**Step 1: Get a smee channel URL**
+
+Visit [smee.io](https://smee.io) and click "Start a new channel", or create one programmatically:
+
+```ts
+const url = await SmeeClient.createChannel()
+console.log(url) // https://smee.io/xxxxxxxx
+```
+
+**Step 2: Configure GitHub Webhook**
+
+1. Go to your repository → Settings → Webhooks → Add webhook
+2. Set **Payload URL** to your smee channel URL
+3. Set **Content type** to `application/json`
+4. Set **Secret** to a secure random string (save it for verification)
+5. Under "Which events would you like to trigger this webhook?", select "Let me select individual events" and check **Stars**
+6. Click "Add webhook"
+
+**Step 3: Handle star events**
+
+```ts
+import { SmeeClient } from 'smee-it'
+
+const client = new SmeeClient('https://smee.io/your-channel')
+
+client.on('message', (event) => {
+  const eventType = event.headers['x-github-event']
+
+  if (eventType === 'star') {
+    const { action, sender, repository } = event.body as {
+      action: 'created' | 'deleted'
+      sender: { login: string }
+      repository: { full_name: string; stargazers_count: number }
+    }
+
+    if (action === 'created') {
+      console.log(`⭐ ${sender.login} starred ${repository.full_name}`)
+      console.log(`   Total stars: ${repository.stargazers_count}`)
+    } else {
+      console.log(`💔 ${sender.login} unstarred ${repository.full_name}`)
+    }
+  }
+})
+
+client.on('open', () => console.log('Listening for star events...'))
+client.start()
+```
+
+#### Push Event Handler
+
+Monitor push events and log commit information:
+
+```ts
+client.on('message', (event) => {
+  if (event.headers['x-github-event'] !== 'push') return
+
+  const { ref, commits, pusher } = event.body as {
+    ref: string
+    commits: Array<{ id: string; message: string }>
+    pusher: { name: string }
+  }
+
+  const branch = ref.replace('refs/heads/', '')
+  console.log(`📦 ${pusher.name} pushed ${commits.length} commit(s) to ${branch}`)
+
+  commits.forEach((commit) => {
+    console.log(`   - ${commit.id.slice(0, 7)}: ${commit.message.split('\n')[0]}`)
+  })
+})
+```
+
+#### Issue and PR Notifications
+
+```ts
+client.on('message', (event) => {
+  const eventType = event.headers['x-github-event']
+  const { action, sender } = event.body as {
+    action: string
+    sender: { login: string }
+  }
+
+  if (eventType === 'issues') {
+    const { issue } = event.body as { issue: { number: number; title: string } }
+    console.log(`📋 Issue #${issue.number} ${action} by ${sender.login}: ${issue.title}`)
+  }
+
+  if (eventType === 'pull_request') {
+    const { pull_request } = event.body as { pull_request: { number: number; title: string } }
+    console.log(`🔀 PR #${pull_request.number} ${action} by ${sender.login}: ${pull_request.title}`)
+  }
+})
+```
+
 ### Security Considerations
 
 smee.io channels are publicly accessible. Anyone with the channel URL can view the webhook data.
@@ -265,6 +364,105 @@ client.on('message', async (event) => {
     return
   }
   // 处理已验证的事件
+})
+```
+
+### 使用示例
+
+#### GitHub Star 变更通知
+
+完整示例：当有人 Star 或取消 Star 你的仓库时收到通知。
+
+**第一步：获取 smee 频道 URL**
+
+访问 [smee.io](https://smee.io) 点击 "Start a new channel"，或通过代码创建：
+
+```ts
+const url = await SmeeClient.createChannel()
+console.log(url) // https://smee.io/xxxxxxxx
+```
+
+**第二步：配置 GitHub Webhook**
+
+1. 进入仓库 → Settings → Webhooks → Add webhook
+2. **Payload URL** 填写你的 smee 频道 URL
+3. **Content type** 选择 `application/json`
+4. **Secret** 填写一个安全的随机字符串（保存好，后续验证需要）
+5. 在 "Which events would you like to trigger this webhook?" 中选择 "Let me select individual events"，勾选 **Stars**
+6. 点击 "Add webhook"
+
+**第三步：处理 Star 事件**
+
+```ts
+import { SmeeClient } from 'smee-it'
+
+const client = new SmeeClient('https://smee.io/your-channel')
+
+client.on('message', (event) => {
+  const eventType = event.headers['x-github-event']
+
+  if (eventType === 'star') {
+    const { action, sender, repository } = event.body as {
+      action: 'created' | 'deleted'
+      sender: { login: string }
+      repository: { full_name: string; stargazers_count: number }
+    }
+
+    if (action === 'created') {
+      console.log(`⭐ ${sender.login} starred ${repository.full_name}`)
+      console.log(`   当前 star 数: ${repository.stargazers_count}`)
+    } else {
+      console.log(`💔 ${sender.login} 取消了对 ${repository.full_name} 的 star`)
+    }
+  }
+})
+
+client.on('open', () => console.log('正在监听 star 事件...'))
+client.start()
+```
+
+#### 监听 Push 事件
+
+监控代码推送并打印提交信息：
+
+```ts
+client.on('message', (event) => {
+  if (event.headers['x-github-event'] !== 'push') return
+
+  const { ref, commits, pusher } = event.body as {
+    ref: string
+    commits: Array<{ id: string; message: string }>
+    pusher: { name: string }
+  }
+
+  const branch = ref.replace('refs/heads/', '')
+  console.log(`📦 ${pusher.name} 推送了 ${commits.length} 个提交到 ${branch}`)
+
+  commits.forEach((commit) => {
+    console.log(`   - ${commit.id.slice(0, 7)}: ${commit.message.split('\n')[0]}`)
+  })
+})
+```
+
+#### Issue 和 PR 通知
+
+```ts
+client.on('message', (event) => {
+  const eventType = event.headers['x-github-event']
+  const { action, sender } = event.body as {
+    action: string
+    sender: { login: string }
+  }
+
+  if (eventType === 'issues') {
+    const { issue } = event.body as { issue: { number: number; title: string } }
+    console.log(`📋 Issue #${issue.number} 被 ${sender.login} ${action}: ${issue.title}`)
+  }
+
+  if (eventType === 'pull_request') {
+    const { pull_request } = event.body as { pull_request: { number: number; title: string } }
+    console.log(`🔀 PR #${pull_request.number} 被 ${sender.login} ${action}: ${pull_request.title}`)
+  }
 })
 ```
 
